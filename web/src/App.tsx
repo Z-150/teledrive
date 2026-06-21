@@ -42,6 +42,14 @@ function App(): React.ReactElement {
   const { data: me, error: errorMe, mutate: mutateMe } = useSWRImmutable('/users/me', fetcher)
   const [loading, setLoading] = useState<boolean>(true)
 
+  useEffect(() => {
+    if ((window as any).Telegram?.WebApp) {
+      const tg = (window as any).Telegram.WebApp
+      tg.ready()
+      tg.expand()
+    }
+  }, [])
+
   useEffect(() => document.querySelector('.App')?.scrollIntoView(), [pathname])
 
   useEffect(() => {

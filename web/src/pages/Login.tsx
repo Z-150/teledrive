@@ -33,10 +33,25 @@ const Login: React.FC<Props> = ({ me }) => {
   const [countdown, setCountdown] = useState<number>()
   const [phoneCodeHash, setPhoneCodeHash] = useState<string>()
   const [needPassword, setNeedPassword] = useState<boolean>()
-  const [method, setMethod] = useState<'phoneNumber' | 'qrCode'>('phoneNumber')
+  const [method, setMethod] = useState<'phoneNumber' | 'qrCode' | 'register'>('phoneNumber')
+  const [registerOtp, setRegisterOtp] = useState<string | null>(null)
+  const [loadingRegister, setLoadingRegister] = useState<boolean>(false)
   const { data: _ } = useSWRImmutable('/utils/ipinfo', fetcher, { onSuccess: ({ ipinfo }) => setPhoneData(phoneData?.short ? phoneData : { short: ipinfo?.country || 'ID' }) })
   const [qrCode, setQrCode] = useState<{ loginToken: string, accessToken?: string, session?: string }>()
   const { currentTheme } = useThemeSwitcher()
+
+  const onRegister = async (values: any) => {
+    try {
+      setLoadingRegister(true)
+      const res = await req.post('/api/v1/auth/register', { username: values.username })
+      setRegisterOtp(res.data.otp)
+      notification.success({ message: 'Registrasi diinisiasi!' })
+    } catch (e: any) {
+      notification.error({ message: e.response?.data?.error || 'Gagal mendaftar' })
+    } finally {
+      setLoadingRegister(false)
+    }
+  }
 
   // useEffect(() => {
   //   // init config
@@ -510,6 +525,8 @@ const Login: React.FC<Props> = ({ me }) => {
                   </Form.Item>
                   <Typography.Paragraph style={{ textAlign: 'center' }}>
                     <Button type="link" onClick={() => setMethod('qrCode')}>Login by QR Code</Button>
+                    <span style={{ margin: '0 8px' }}>|</span>
+                    <Button type="link" onClick={() => setMethod('register')}>Register Here</Button>
                   </Typography.Paragraph>
                 </>}
 
@@ -580,6 +597,8 @@ const Login: React.FC<Props> = ({ me }) => {
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ textAlign: 'center' }}>
                           <Button type="link" onClick={() => setMethod('phoneNumber')}>Login by Phone Number</Button>
+                          <br />
+                          <Button type="link" onClick={() => setMethod('register')}>Register Here</Button>
                         </Typography.Paragraph>
                       </Col>
                     </Row>
@@ -597,6 +616,34 @@ const Login: React.FC<Props> = ({ me }) => {
                       </Form.Item>
                     </Form>
                   </>}
+                </Layout.Content>
+              </Layout>
+            </>}
+            {method === 'register' && <>
+              <Layout>
+                <Layout.Content style={{ textAlign: 'center' }}>
+                  <Typography.Title level={4}>Register Account</Typography.Title>
+                  {!registerOtp ?
+                    <Form layout="vertical" onFinish={onRegister}>
+                      <Form.Item name="username" label="Telegram Username (tanpa @)" rules={[{ required: true }]}>
+                        <Input placeholder="e.g. johndoe" size="large" />
+                      </Form.Item>
+                      <Form.Item>
+                        <Button type="primary" size="large" htmlType="submit" loading={loadingRegister} block shape="round">Daftar</Button>
+                      </Form.Item>
+                    </Form>
+                    :
+                    <div>
+                      <Typography.Paragraph>
+                        Kode OTP Anda: <b>{registerOtp}</b>
+                      </Typography.Paragraph>
+                      <Typography.Paragraph>
+                        Silakan chat Telegram Bot kami untuk verifikasi pendaftaran dengan mengirimkan format perintah:<br/>
+                        <code style={{ fontSize: 18 }}>/start {registerOtp}</code>
+                      </Typography.Paragraph>
+                    </div>
+                  }
+                  <Button type="link" onClick={() => setMethod('phoneNumber')}>Back to Login</Button>
                 </Layout.Content>
               </Layout>
             </>}

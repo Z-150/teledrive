@@ -29,6 +29,7 @@ import { markdownSafe } from './utils/StringParser'
 }
 
 
+import './bot'
 Redis.connect()
 
 const curl = cURL({ attach: true })

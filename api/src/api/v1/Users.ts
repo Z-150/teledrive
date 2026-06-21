@@ -87,16 +87,18 @@ export class Users {
     // if (settings.saved_location && (!req.user.plan || req.user.plan === 'free') && moment().format('l') !== '2/2/2022') {
     //   throw { status: 402, body: { error: 'You need to upgrade your plan to use this feature' } }
     // }
-    req.user.settings = {
-      ...req.user.settings as Prisma.JsonObject || {},
+    const currentSettings = typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings || {}
+    const newSettings = {
+      ...currentSettings,
       ...settings
     }
+    req.user.settings = JSON.stringify(newSettings) as any
     await prisma.users.update({
       where: { id: req.user.id },
       data: req.user
     })
     await Redis.connect().del(`auth:${req.authKey}`)
-    return res.send({ settings: req.user?.settings })
+    return res.send({ settings: newSettings })
   }
 
   @Endpoint.POST('/me/delete', { middlewares: [Auth] })

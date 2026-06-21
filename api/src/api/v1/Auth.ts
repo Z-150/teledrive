@@ -16,6 +16,38 @@ import { TGSessionAuth } from '../middlewares/TGSessionAuth'
 
 @Endpoint.API()
 export class Auth {
+  @Endpoint.POST()
+  public async register(req: Request, res: Response): Promise<any> {
+    const { username } = req.body
+    if (!username) throw { status: 400, body: { error: 'Telegram username is required' } }
+
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown'
+    const limitDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    const recentRegs = await prisma.registrations.count({
+      where: {
+        ip_address: ipAddress.toString(),
+        created_at: { gte: limitDate }
+      }
+    })
+
+    if (recentRegs >= 2) {
+      throw { status: 429, body: { error: 'Limit registrasi tercapai untuk IP ini (Max 2 per minggu).' } }
+    }
+
+    const otp = require('crypto').randomBytes(3).toString('hex').toUpperCase()
+
+    await prisma.registrations.create({
+      data: {
+        tg_username: username.replace('@', ''),
+        ip_address: ipAddress.toString(),
+        otp,
+        status: 'PENDING_OTP'
+      }
+    })
+
+    return res.send({ success: true, otp })
+  }
 
   @Endpoint.POST({ middlewares: [TGClient] })
   public async sendCode(req: Request, res: Response): Promise<any> {
@@ -80,7 +112,7 @@ export class Auth {
       throw { status: 400, body: { error: 'User not found/authorized' } }
     }
 
-    let user = await prisma.users.findFirst({ where: { tg_id: userAuth.id.toString() } })
+    let user = await prisma.users.findFirst({ where: { OR: [{ tg_id: userAuth.id.toString() }, { username: userAuth.username }] } })
     const config = await prisma.config.findFirst()
     const username = userAuth.username || userAuth.phone || phoneNumber
     if (!user) {
@@ -104,7 +136,7 @@ export class Auth {
     await prisma.users.update({
       data: {
         username,
-        plan: 'premium'
+        tg_id: userAuth.id.toString()
       },
       where: { id: user.id }
     })
@@ -169,14 +201,14 @@ export class Auth {
     try {
       await req.tg.connect()
       const userAuth = await req.tg.getMe()
-      const user = await prisma.users.findFirst({ where: { tg_id: userAuth['id'].toString() } })
+      const user = await prisma.users.findFirst({ where: { OR: [{ tg_id: userAuth['id'].toString() }, { username: userAuth['username'] }] } })
       if (!user) {
         throw { status: 404, body: { error: 'User not found' } }
       }
       await prisma.users.update({
         data: {
           username: req.userAuth?.username || req.userAuth?.phone || user.username,
-          plan: 'premium'
+          tg_id: userAuth['id'].toString()
         },
         where: { id: user.id }
       })
@@ -254,7 +286,7 @@ export class Auth {
         throw { status: 400, body: { error: 'User not found/authorized' } }
       }
 
-      let user = await prisma.users.findFirst({ where: { tg_id: userAuth.id.toString() } })
+      let user = await prisma.users.findFirst({ where: { OR: [{ tg_id: userAuth.id.toString() }, { username: userAuth['username'] }] } })
       const config = await prisma.config.findFirst()
       if (!user) {
         if (config?.disable_signup) {
@@ -372,7 +404,7 @@ export class Auth {
         // result import login token success
         if (result instanceof Api.auth.LoginTokenSuccess && result.authorization instanceof Api.auth.Authorization) {
           const userAuth = result.authorization.user
-          let user = await prisma.users.findFirst({ where: { tg_id: userAuth.id.toString() } })
+          let user = await prisma.users.findFirst({ where: { OR: [{ tg_id: userAuth.id.toString() }, { username: userAuth['username'] }] } })
           const config = await prisma.config.findFirst()
           if (!user) {
             if (config?.disable_signup) {
@@ -407,7 +439,7 @@ export class Auth {
         // handle if success
       } else if (data instanceof Api.auth.LoginTokenSuccess && data.authorization instanceof Api.auth.Authorization) {
         const userAuth = data.authorization.user
-        let user = await prisma.users.findFirst({ where: { tg_id: userAuth.id.toString() } })
+        let user = await prisma.users.findFirst({ where: { OR: [{ tg_id: userAuth.id.toString() }, { username: userAuth['username'] }] } })
         const config = await prisma.config.findFirst()
         if (!user) {
           if (config?.disable_signup) {

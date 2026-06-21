@@ -45,7 +45,7 @@ export class Files {
             AND: [
               {
                 sharing_options: {
-                  has: req.user?.username
+                  contains: `"${req.user?.username}"`
                 }
               },
               {
@@ -57,7 +57,7 @@ export class Files {
                   {
                     parent: {
                       sharing_options: {
-                        isEmpty: true
+                        equals: '[]'
                       }
                     }
                   },
@@ -65,7 +65,7 @@ export class Files {
                     NOT: {
                       parent: {
                         sharing_options: {
-                          has: req.user?.username
+                          contains: `"${req.user?.username}"`
                         }
                       }
                     }
@@ -345,8 +345,8 @@ export class Files {
             chatId: bigInt(peerId) })
         }
       }
-      const [type, peerId, _, accessHash] = ((req.user.settings as Prisma.JsonObject).saved_location as string).split('/')
-      if ((req.user.settings as Prisma.JsonObject)?.saved_location) {
+      const [type, peerId, _, accessHash] = (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any).saved_location as string).split('/')
+      if (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location) {
         if (type === 'channel') {
           peerTo = new Api.InputPeerChannel({
             channelId: bigInt(peerId),
@@ -637,6 +637,13 @@ export class Files {
       throw { status: 400, body: { error: 'File upload is required' } }
     }
 
+    const isPremium = req.user?.plan === 'premium' || req.user?.role === 'admin'
+    const maxSize = isPremium ? 4294967296 : 1073741824 // 4GB premium, 1GB free
+    if (Number(size) > maxSize) {
+      if (!isPremium) throw { status: 403, body: { error: 'Maksimal ukuran file 1GB. Silakan hubungi admin untuk upgrade ke Premium!' } }
+      else throw { status: 403, body: { error: 'Maksimal ukuran file Telegram telah terlewati.' } }
+    }
+
     if (file.size > 512 * 1024) {
       throw { status: 400, body: { error: 'Maximum file part size is 500kB' } }
     }
@@ -731,7 +738,7 @@ export class Files {
             parent_id: currentParentId || null,
             upload_progress: 0,
             file_id: bigInt.randBetween('-1e100', '1e100').toString(),
-            forward_info: (req.user.settings as Prisma.JsonObject)?.saved_location as string || null,
+            forward_info: ((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location as string || null,
           }
         })
       }
@@ -775,8 +782,8 @@ export class Files {
     // begin to send
     const sendData = async (forceDocument: boolean) => {
       let peer: Api.InputPeerChannel | Api.InputPeerUser | Api.InputPeerChat
-      if ((req.user.settings as Prisma.JsonObject)?.saved_location) {
-        const [type, peerId, _, accessHash] = ((req.user.settings as Prisma.JsonObject).saved_location as string).split('/')
+      if (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location) {
+        const [type, peerId, _, accessHash] = (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any).saved_location as string).split('/')
         if (type === 'channel') {
           peer = new Api.InputPeerChannel({
             channelId: bigInt(peerId),
@@ -814,8 +821,8 @@ export class Files {
     }
 
     let forwardInfo = null
-    if ((req.user.settings as Prisma.JsonObject)?.saved_location) {
-      const [type, peerId, _, accessHash] = ((req.user.settings as Prisma.JsonObject).saved_location as string).split('/')
+    if (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location) {
+      const [type, peerId, _, accessHash] = (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any).saved_location as string).split('/')
       forwardInfo = `${type}/${peerId}/${data.id?.toString()}/${accessHash}`
     }
 
@@ -937,7 +944,7 @@ export class Files {
               parent_id: currentParentId || null,
               upload_progress: 0,
               file_id: bigInt.randBetween('-1e100', '1e100').toString(),
-              forward_info: (req.user.settings as Prisma.JsonObject)?.saved_location as string || null,
+              forward_info: ((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location as string || null,
             }
           })
         }
@@ -958,8 +965,8 @@ export class Files {
     }
 
     let forwardInfo: string
-    if ((req.user.settings as Prisma.JsonObject)?.saved_location) {
-      const [type, peerId, _, accessHash] = ((req.user.settings as Prisma.JsonObject).saved_location as string).split('/')
+    if (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location) {
+      const [type, peerId, _, accessHash] = (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any).saved_location as string).split('/')
       forwardInfo = `${type}/${peerId}/${message.id?.toString()}/${accessHash}`
     }
 
@@ -1008,8 +1015,8 @@ export class Files {
     // }
 
     let peer: Api.InputPeerChannel | Api.InputPeerUser | Api.InputPeerChat
-    if ((req.user.settings as Prisma.JsonObject)?.saved_location) {
-      const [type, peerId, _, accessHash] = ((req.user.settings as Prisma.JsonObject).saved_location as string).split('/')
+    if (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any)?.saved_location) {
+      const [type, peerId, _, accessHash] = (((typeof req.user.settings === 'string' ? JSON.parse(req.user.settings) : req.user.settings) || {} as any).saved_location as string).split('/')
       if (type === 'channel') {
         peer = new Api.InputPeerChannel({
           channelId: bigInt(peerId),
@@ -1060,24 +1067,24 @@ export class Files {
       })
       const filesWantToSave = files.filter(file => !existFiles.find(e => e.message_id == file.id))
       if (filesWantToSave?.length) {
-        await prisma.files.createMany({
-          data: filesWantToSave.map(file => {
-            const mimeType = file.media.photo ? 'image/jpeg' : file.media.document.mimeType || 'unknown'
-            const name = file.media.photo ? `${file.media.photo.id}.jpg` : file.media.document.attributes?.find((atr: any) => atr.fileName)?.fileName || `${file.media?.document.id}.${mimeType.split('/').pop()}`
+        await Promise.all(filesWantToSave.map(file => {
+          const mimeType = file.media.photo ? 'image/jpeg' : file.media.document.mimeType || 'unknown'
+          const name = file.media.photo ? `${file.media.photo.id}.jpg` : file.media.document.attributes?.find((atr: any) => atr.fileName)?.fileName || `${file.media?.document.id}.${mimeType.split('/').pop()}`
 
-            const getSizes = ({ size, sizes }) => sizes ? sizes.pop() : size
-            const size = file.media.photo ? getSizes(file.media.photo.sizes.pop()) : file.media.document?.size
-            let type = file.media.photo
-            if (file.media.document?.mimeType.match(/^video/gi) || name.match(/\.mp4$/gi) || name.match(/\.mkv$/gi) || name.match(/\.mov$/gi)) {
-              type = 'video'
-            } else if (file.media.document?.mimeType.match(/pdf$/gi) || name.match(/\.doc$/gi) || name.match(/\.docx$/gi) || name.match(/\.xls$/gi) || name.match(/\.xlsx$/gi)) {
-              type = 'document'
-            } else if (file.media.document?.mimeType.match(/audio$/gi) || name.match(/\.mp3$/gi) || name.match(/\.ogg$/gi)) {
-              type = 'audio'
-            } else if (file.media.document?.mimeType.match(/^image/gi) || name.match(/\.jpg$/gi) || name.match(/\.jpeg$/gi) || name.match(/\.png$/gi) || name.match(/\.gif$/gi)) {
-              type = 'image'
-            }
-            return {
+          const getSizes = ({ size, sizes }) => sizes ? sizes.pop() : size
+          const size = file.media.photo ? getSizes(file.media.photo.sizes.pop()) : file.media.document?.size
+          let type = file.media.photo
+          if (file.media.document?.mimeType.match(/^video/gi) || name.match(/\.mp4$/gi) || name.match(/\.mkv$/gi) || name.match(/\.mov$/gi)) {
+            type = 'video'
+          } else if (file.media.document?.mimeType.match(/pdf$/gi) || name.match(/\.doc$/gi) || name.match(/\.docx$/gi) || name.match(/\.xls$/gi) || name.match(/\.xlsx$/gi)) {
+            type = 'document'
+          } else if (file.media.document?.mimeType.match(/audio$/gi) || name.match(/\.mp3$/gi) || name.match(/\.ogg$/gi)) {
+            type = 'audio'
+          } else if (file.media.document?.mimeType.match(/^image/gi) || name.match(/\.jpg$/gi) || name.match(/\.jpeg$/gi) || name.match(/\.png$/gi) || name.match(/\.gif$/gi)) {
+            type = 'image'
+          }
+          return prisma.files.create({
+            data: {
               name,
               message_id: file.id.toString(),
               mime_type: mimeType,
@@ -1088,7 +1095,7 @@ export class Files {
               parent_id: parentId ? parentId.toString() : null
             }
           })
-        })
+        }))
       }
     }
     return res.send({ files })
