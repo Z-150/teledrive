@@ -33,7 +33,7 @@ const Login: React.FC<Props> = ({ me }) => {
   const [countdown, setCountdown] = useState<number>()
   const [phoneCodeHash, setPhoneCodeHash] = useState<string>()
   const [needPassword, setNeedPassword] = useState<boolean>()
-  const [method, setMethod] = useState<'phoneNumber' | 'qrCode' | 'register'>('phoneNumber')
+  const [method, setMethod] = useState<'phoneNumber' | 'qrCode' | 'register'>('qrCode')
   const [registerOtp, setRegisterOtp] = useState<string | null>(null)
   const [loadingRegister, setLoadingRegister] = useState<boolean>(false)
   const { data: _ } = useSWRImmutable('/utils/ipinfo', fetcher, { onSuccess: ({ ipinfo }) => setPhoneData(phoneData?.short ? phoneData : { short: ipinfo?.country || 'ID' }) })
@@ -514,18 +514,7 @@ const Login: React.FC<Props> = ({ me }) => {
               <Form layout="vertical" form={formLogin} onFinish={login}>
 
                 {currentStep === 0 && <>
-                  <Form.Item>
-                    <ConfigProvider locale={en}>
-                      <CountryPhoneInput value={phoneData} type="tel" onChange={e => setPhoneData(e)} />
-                    </ConfigProvider>
-                    {/* <Input.Search placeholder="+6289123456789" type="tel" enterButton={countdown ? `Re-send in ${countdown}s...` : phoneCodeHash ? 'Re-send' : 'Send'} loading={loadingSendCode} onSearch={sendCode} /> */}
-                  </Form.Item>
-                  <Form.Item style={{ marginTop: '50px', textAlign: 'center' }} wrapperCol={{ span: 24 }}>
-                    <Button disabled={!phoneData?.phone} type="primary" size="large" htmlType="submit" icon={<ArrowRightOutlined />} shape="round" loading={loadingSendCode}>{phoneCodeHash ? 'Re-send code' : 'Send code'}</Button>
-                  </Form.Item>
                   <Typography.Paragraph style={{ textAlign: 'center' }}>
-                    <Button type="link" onClick={() => setMethod('qrCode')}>Login by QR Code</Button>
-                    <span style={{ margin: '0 8px' }}>|</span>
                     <Button type="link" onClick={() => setMethod('register')}>Register Here</Button>
                   </Typography.Paragraph>
                 </>}
@@ -596,8 +585,6 @@ const Login: React.FC<Props> = ({ me }) => {
                           </Collapse> */}
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ textAlign: 'center' }}>
-                          <Button type="link" onClick={() => setMethod('phoneNumber')}>Login by Phone Number</Button>
-                          <br />
                           <Button type="link" onClick={() => setMethod('register')}>Register Here</Button>
                         </Typography.Paragraph>
                       </Col>
