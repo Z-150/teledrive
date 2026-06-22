@@ -27,6 +27,7 @@ if (process.env.TG_BOT_TOKEN) {
 
   bot.command('start', async (ctx) => {
     const payload = ctx.match
+    // /start <otp> — registrasi OTP flow
     if (payload) {
       const reg = await prisma.registrations.findFirst({
         where: { otp: payload as string, status: 'PENDING_OTP' }
@@ -64,24 +65,66 @@ if (process.env.TG_BOT_TOKEN) {
       return
     }
 
-    const user = (ctx as any).dbUser
+    // Cek apakah user sudah ada di DB
+    const tgId = ctx.from?.id.toString()
+    const tgUsername = ctx.from?.username
+    const user = await prisma.users.findFirst({
+      where: { OR: [{ tg_id: tgId }, ...(tgUsername ? [{ username: tgUsername }] : [])] }
+    })
+
+    const webAppUrl = process.env.WEBAPP_URL || 'https://teledriveapp.com'
+
+    // User belum ada di DB → suruh login/daftar dulu
+    if (!user) {
+      const keyboard = new InlineKeyboard()
+        .webApp('🔐 Login / Daftar ke Teledrive', webAppUrl)
+
+      return ctx.reply(
+        '👋 Halo! Selamat datang di *Teledrive Bot*.\n\n' +
+        'Sepertinya kamu belum memiliki akun Teledrive.\n\n' +
+        '📱 Silakan buka WebApp di bawah ini untuk *Login dengan QR Code* atau *Daftar* terlebih dahulu.\n\n' +
+        '_Setelah login, kembali ke sini dan ketik /start lagi untuk menggunakan fitur bot._',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      )
+    }
+
+    // User sudah ada di DB → tampilkan menu manage drive
     if (user.role === 'admin') {
       const keyboard = new InlineKeyboard()
+        .webApp('📁 Buka Drive Saya', webAppUrl).row()
         .text('👥 Manajemen User', 'manage_users').row()
         .text('⚙️ Pengaturan', 'settings')
 
-      return ctx.reply('👑 *Selamat Datang Admin!*', {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard
-      })
+      return ctx.reply(
+        `👑 *Selamat Datang Admin!*\n\nHalo, *${user.name || user.username}*! Apa yang ingin kamu kelola hari ini?`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      )
     } else {
-      const keyboard = new InlineKeyboard()
-        .webApp('🌐 Buka Teledrive', process.env.WEBAPP_URL || 'https://teledriveapp.com')
-
-      return ctx.reply('👋 *Selamat Datang di Teledrive Bot!*\n\nKlik tombol di bawah ini untuk membuka Teledrive WebApp.', { 
-        parse_mode: 'Markdown',
-        reply_markup: keyboard
+      // Hitung file user
+      const fileCount = await prisma.files.count({
+        where: { user_id: user.id, deleted_at: null }
       })
+
+      const keyboard = new InlineKeyboard()
+        .webApp('📁 Buka Drive Saya', webAppUrl).row()
+        .webApp('⬆️ Upload File', webAppUrl).row()
+        .text('📊 Info Akun Saya', 'my_account_info')
+
+      return ctx.reply(
+        `👋 Halo, *${user.name || user.username}*!\n\n` +
+        `📦 Kamu memiliki *${fileCount} file* di drive kamu.\n\n` +
+        `Apa yang ingin kamu lakukan?`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      )
     }
   })
 
@@ -142,6 +185,40 @@ if (process.env.TG_BOT_TOKEN) {
     text += '</pre>\n\nKirim perintah <code>/setpremium &lt;username&gt;</code> untuk menjadikan user Premium, atau <code>/deluser &lt;username&gt;</code> untuk menghapus.'
 
     ctx.editMessageText(`👥 <b>Daftar Pengguna:</b>\n\n${text}`, { parse_mode: 'HTML' })
+    ctx.answerCallbackQuery()
+  })
+
+  bot.callbackQuery('my_account_info', async (ctx) => {
+    const tgId = ctx.from?.id.toString()
+    const tgUsername = ctx.from?.username
+    const user = await prisma.users.findFirst({
+      where: { OR: [{ tg_id: tgId }, ...(tgUsername ? [{ username: tgUsername }] : [])] }
+    })
+    if (!user) return ctx.answerCallbackQuery('User tidak ditemukan.')
+
+    const fileCount = await prisma.files.count({ where: { user_id: user.id, deleted_at: null } })
+    const totalSize = await prisma.files.aggregate({
+      where: { user_id: user.id, deleted_at: null },
+      _sum: { size: true }
+    })
+
+    const sizeBytes = Number(totalSize._sum.size || 0)
+    const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2)
+    const sizeGB = (sizeBytes / 1024 / 1024 / 1024).toFixed(2)
+    const sizeDisplay = sizeBytes > 1024 * 1024 * 1024 ? `${sizeGB} GB` : `${sizeMB} MB`
+
+    const webAppUrl = process.env.WEBAPP_URL || 'https://teledriveapp.com'
+    const keyboard = new InlineKeyboard()
+      .webApp('📁 Buka Drive Saya', webAppUrl)
+
+    ctx.editMessageText(
+      `📊 *Info Akun Saya*\n\n` +
+      `👤 Username: @${user.username}\n` +
+      `💎 Plan: ${user.plan || 'free'}\n` +
+      `📁 Total File: *${fileCount} file*\n` +
+      `💾 Total Ukuran: *${sizeDisplay}*`,
+      { parse_mode: 'Markdown', reply_markup: keyboard }
+    )
     ctx.answerCallbackQuery()
   })
 

@@ -47,6 +47,29 @@ function App(): React.ReactElement {
       const tg = (window as any).Telegram.WebApp
       tg.ready()
       tg.expand()
+
+      // Auto-login via Mini App initData
+      const initData = tg.initData
+      if (initData && !me?.user) {
+        const alreadyTriedKey = 'tg_auth_attempted'
+        if (!sessionStorage.getItem(alreadyTriedKey)) {
+          sessionStorage.setItem(alreadyTriedKey, '1')
+          fetch('/api/v1/auth/telegramAuth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData }),
+            credentials: 'include'
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data?.user) {
+                window.location.replace('/dashboard')
+              }
+              // USER_NOT_FOUND or NO_SESSION → stay on login page, no action needed
+            })
+            .catch(() => {}) // silently fail, let user login manually
+        }
+      }
     }
   }, [])
 

@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto'
 import { AES } from 'crypto-js'
 import { Request, Response } from 'express'
 import { sign, verify } from 'jsonwebtoken'
@@ -16,6 +17,108 @@ import { TGSessionAuth } from '../middlewares/TGSessionAuth'
 
 @Endpoint.API()
 export class Auth {
+  /**
+   * Auto-login via Telegram Mini App initData (HMAC verified)
+   */
+  @Endpoint.POST()
+  public async telegramAuth(req: Request, res: Response): Promise<any> {
+    const { initData } = req.body
+    if (!initData) {
+      throw { status: 400, body: { error: 'initData is required' } }
+    }
+
+    const botToken = process.env.TG_BOT_TOKEN
+    if (!botToken) {
+      throw { status: 500, body: { error: 'Bot not configured' } }
+    }
+
+    // Verify HMAC-SHA256 signature from Telegram
+    const params = new URLSearchParams(initData)
+    const hash = params.get('hash')
+    if (!hash) {
+      throw { status: 400, body: { error: 'Invalid initData: missing hash' } }
+    }
+
+    params.delete('hash')
+    const dataCheckString = Array.from(params.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n')
+
+    const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest()
+    const expectedHash = createHmac('sha256', secretKey).update(dataCheckString).digest('hex')
+
+    if (expectedHash !== hash) {
+      throw { status: 403, body: { error: 'Invalid initData signature' } }
+    }
+
+    // Check if initData is not too old (max 1 hour)
+    const authDate = Number(params.get('auth_date') || 0)
+    if (Date.now() / 1000 - authDate > 3600) {
+      throw { status: 403, body: { error: 'initData expired' } }
+    }
+
+    // Extract user info
+    let tgUser: any
+    try {
+      tgUser = JSON.parse(params.get('user') || '{}')
+    } catch {
+      throw { status: 400, body: { error: 'Invalid user data in initData' } }
+    }
+
+    const tgId = tgUser.id?.toString()
+    const tgUsername = tgUser.username
+
+    if (!tgId) {
+      throw { status: 400, body: { error: 'No user id in initData' } }
+    }
+
+    // Find user in DB
+    const user = await prisma.users.findFirst({
+      where: { OR: [{ tg_id: tgId }, ...(tgUsername ? [{ username: tgUsername }] : [])] }
+    })
+
+    if (!user) {
+      return res.status(404).send({ error: 'USER_NOT_FOUND', message: 'Please register first via the login page.' })
+    }
+
+    if (!user.tg_session) {
+      return res.status(401).send({ error: 'NO_SESSION', message: 'Please login with QR Code first to save your session.' })
+    }
+
+    // Restore saved Telegram session
+    try {
+      const tgSession = new StringSession(user.tg_session)
+      const tgClient = new TelegramClient(tgSession, TG_CREDS.apiId, TG_CREDS.apiHash, {
+        connectionRetries: CONNECTION_RETRIES,
+        useWSS: false,
+        ...process.env.ENV === 'production' ? { baseLogger: new Logger(LogLevel.NONE) } : {}
+      })
+      await tgClient.connect()
+      await tgClient.getMe()
+
+      const session = tgClient.session.save() as any
+      await prisma.users.update({
+        data: { tg_id: tgId, tg_session: session },
+        where: { id: user.id }
+      })
+
+      const auth = {
+        session,
+        accessToken: sign({ session }, API_JWT_SECRET, { expiresIn: '15h' }),
+        refreshToken: sign({ session }, API_JWT_SECRET, { expiresIn: '100y' }),
+        expiredAfter: Date.now() + COOKIE_AGE
+      }
+      return res
+        .cookie('authorization', `Bearer ${auth.accessToken}`, { maxAge: COOKIE_AGE, expires: new Date(auth.expiredAfter) })
+        .cookie('refreshToken', auth.refreshToken, { maxAge: 3.154e+10, expires: new Date(Date.now() + 3.154e+10) })
+        .send({ user, ...auth })
+    } catch (error) {
+      return res.status(401).send({ error: 'SESSION_EXPIRED', message: 'Session expired. Please login with QR Code again.' })
+    }
+  }
+
+
   @Endpoint.POST()
   public async register(req: Request, res: Response): Promise<any> {
     const { username } = req.body
