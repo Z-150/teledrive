@@ -621,8 +621,6 @@ const Login: React.FC<Props> = ({ me }) => {
                         </Button>
                       </Form.Item>
                     </Form>
-                      </Col>
-                    </Row>
                     {/* <Row>
                       <Col lg={{ span: 14, offset: 5 }} md={{ span: 18, offset: 3 }} sm={{ span: 20, offset: 2 }} span={24}>
                       </Col>
