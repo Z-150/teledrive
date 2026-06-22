@@ -62,8 +62,10 @@ function App(): React.ReactElement {
         if (!hasTried) {
           try {
             sessionStorage.setItem(alreadyTriedKey, '1')
-          } catch (e) {} // ignore
-          
+          } catch (e) {
+            // ignore
+          }
+
           fetch('/api/v1/auth/telegramAuth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
