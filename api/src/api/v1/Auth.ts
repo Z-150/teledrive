@@ -205,15 +205,16 @@ export class Auth {
       if (!user) {
         throw { status: 404, body: { error: 'User not found' } }
       }
+      const session = req.tg.session.save()
       await prisma.users.update({
         data: {
           username: req.userAuth?.username || req.userAuth?.phone || user.username,
-          tg_id: userAuth['id'].toString()
+          tg_id: userAuth['id'].toString(),
+          tg_session: session
         },
         where: { id: user.id }
       })
 
-      const session = req.tg.session.save()
       const auth = {
         session,
         accessToken: sign({ session }, API_JWT_SECRET, { expiresIn: '15h' }),
@@ -308,16 +309,17 @@ export class Auth {
         })
       }
 
+      const session = req.tg.session.save()
       await prisma.users.update({
         data: {
           username: userAuth.username || userAuth.phone,
-          plan: 'premium'
+          plan: 'premium',
+          tg_session: session
         },
         where: { id: user.id }
       })
 
 
-      const session = req.tg.session.save()
       const auth = {
         session,
         accessToken: sign({ session }, API_JWT_SECRET, { expiresIn: '15h' }),
@@ -359,7 +361,7 @@ export class Auth {
       }))
 
       // build response with user data and auth data
-      const buildResponse = (data: Record<string, any> & { user?: { id: string } })=> {
+      const buildResponse = async (data: Record<string, any> & { user?: { id: string } }) => {
         const session = req.tg.session.save()
         const auth = {
           session,
@@ -373,6 +375,11 @@ export class Auth {
           .send({ ...data, ...auth })
 
         if (data.user?.id) {
+          // save session to DB
+          await prisma.users.update({
+            data: { tg_session: session },
+            where: { id: data.user.id }
+          }).catch(() => {})
           // sync all shared files in background, if any
           prisma.files.findMany({
             where: {
@@ -432,9 +439,9 @@ export class Auth {
             },
             where: { id: user.id }
           })
-          return buildResponse({ user })
+          return await buildResponse({ user })
         }
-        return buildResponse({ data, result })
+        return await buildResponse({ data, result })
 
         // handle if success
       } else if (data instanceof Api.auth.LoginTokenSuccess && data.authorization instanceof Api.auth.Authorization) {
@@ -467,11 +474,11 @@ export class Auth {
           },
           where: { id: user.id }
         })
-        return buildResponse({ user })
+        return await buildResponse({ user })
       }
 
       // data instanceof auth.LoginToken
-      return buildResponse({
+      return await buildResponse({
         loginToken: Buffer.from(data['token'], 'utf8').toString('base64url')
       })
     } catch (error) {
@@ -480,6 +487,61 @@ export class Auth {
         error.session = req.tg.session.save()
       }
       throw error
+    }
+  }
+
+  /**
+   * Login using username (after QR registration). Restores saved session from DB.
+   */
+  @Endpoint.POST()
+  public async loginByUsername(req: Request, res: Response): Promise<any> {
+    const { username } = req.body
+    if (!username) {
+      throw { status: 400, body: { error: 'Username is required' } }
+    }
+
+    const user = await prisma.users.findFirst({
+      where: { username: username.replace('@', '') }
+    })
+
+    if (!user) {
+      throw { status: 404, body: { error: 'User not found' } }
+    }
+
+    if (!user.tg_session) {
+      throw { status: 401, body: { error: 'No saved session. Please login with QR Code first.' } }
+    }
+
+    try {
+      const tgSession = new StringSession(user.tg_session)
+      const tgClient = new TelegramClient(tgSession, TG_CREDS.apiId, TG_CREDS.apiHash, {
+        connectionRetries: CONNECTION_RETRIES,
+        useWSS: false,
+        ...process.env.ENV === 'production' ? { baseLogger: new Logger(LogLevel.NONE) } : {}
+      })
+      await tgClient.connect()
+      // verify session is still valid
+      await tgClient.getMe()
+
+      const session = tgClient.session.save() as any
+      // update saved session in case it refreshed
+      await prisma.users.update({
+        data: { tg_session: session },
+        where: { id: user.id }
+      })
+
+      const auth = {
+        session,
+        accessToken: sign({ session }, API_JWT_SECRET, { expiresIn: '15h' }),
+        refreshToken: sign({ session }, API_JWT_SECRET, { expiresIn: '100y' }),
+        expiredAfter: Date.now() + COOKIE_AGE
+      }
+      return res
+        .cookie('authorization', `Bearer ${auth.accessToken}`, { maxAge: COOKIE_AGE, expires: new Date(auth.expiredAfter) })
+        .cookie('refreshToken', auth.refreshToken, { maxAge: 3.154e+10, expires: new Date(Date.now() + 3.154e+10) })
+        .send({ user, ...auth })
+    } catch (error) {
+      throw { status: 401, body: { error: 'Session expired. Please login with QR Code again.' } }
     }
   }
 

@@ -74,6 +74,7 @@ model users {
   plan            String?
   settings        String?
   role            String?
+  tg_session      String?
   files           files[]
 
   @@index([tg_id])

@@ -1,6 +1,5 @@
-import { ArrowRightOutlined, LoginOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Form, Input, Layout, notification, Row, Spin, Steps, Typography } from 'antd'
-import CountryPhoneInput, { ConfigProvider } from 'antd-country-phone-input'
+import { LoginOutlined, UserOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Divider, Form, Input, Layout, notification, Row, Spin, Steps, Typography } from 'antd'
 import { useForm } from 'antd/lib/form/Form'
 import base64url from 'base64url'
 import JSCookie from 'js-cookie'
@@ -13,7 +12,6 @@ import useSWRImmutable from 'swr/immutable'
 import { Api } from 'telegram'
 import { generateRandomBytes } from 'telegram/Helpers'
 import { computeCheck } from 'telegram/Password'
-import en from 'world_countries_lists/data/countries/en/world.json'
 import { fetcher, req } from '../utils/Fetcher'
 import { anonymousTelegramClient, telegramClient } from '../utils/Telegram'
 
@@ -39,6 +37,8 @@ const Login: React.FC<Props> = ({ me }) => {
   const { data: _ } = useSWRImmutable('/utils/ipinfo', fetcher, { onSuccess: ({ ipinfo }) => setPhoneData(phoneData?.short ? phoneData : { short: ipinfo?.country || 'ID' }) })
   const [qrCode, setQrCode] = useState<{ loginToken: string, accessToken?: string, session?: string }>()
   const { currentTheme } = useThemeSwitcher()
+  const [loadingUsernameLogin, setLoadingUsernameLogin] = useState<boolean>(false)
+  const [formUsernameLogin] = useForm()
 
   const onRegister = async (values: any) => {
     try {
@@ -50,6 +50,27 @@ const Login: React.FC<Props> = ({ me }) => {
       notification.error({ message: e.response?.data?.error || 'Gagal mendaftar' })
     } finally {
       setLoadingRegister(false)
+    }
+  }
+
+  const loginByUsername = async (values: any) => {
+    try {
+      setLoadingUsernameLogin(true)
+      const { data } = await req.post('/auth/loginByUsername', { username: values.username })
+      if (data?.user) {
+        notification.success({
+          message: 'Berhasil!',
+          description: `Selamat datang, ${data.user.name || data.user.username}!`
+        })
+        history.replace('/dashboard')
+      }
+    } catch (error: any) {
+      notification.error({
+        message: 'Login Gagal',
+        description: error?.response?.data?.error || 'Terjadi kesalahan'
+      })
+    } finally {
+      setLoadingUsernameLogin(false)
     }
   }
 
@@ -585,8 +606,21 @@ const Login: React.FC<Props> = ({ me }) => {
                           </Collapse> */}
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ textAlign: 'center' }}>
-                          <Button type="link" onClick={() => setMethod('register')}>Register Here</Button>
+                          <Button type="link" onClick={() => setMethod('register')}>Belum punya akun? Daftar di sini</Button>
                         </Typography.Paragraph>
+                      </Col>
+                    </Row>
+                    <Divider>atau sudah punya akun?</Divider>
+                    <Form form={formUsernameLogin} onFinish={loginByUsername} layout="vertical">
+                      <Form.Item name="username" label="Username Telegram" rules={[{ required: true, message: 'Masukkan username' }]}>
+                        <Input prefix={<UserOutlined />} placeholder="Contoh: johndoe (tanpa @)" size="large" />
+                      </Form.Item>
+                      <Form.Item>
+                        <Button block shape="round" size="large" type="default" htmlType="submit" loading={loadingUsernameLogin} icon={<LoginOutlined />}>
+                          Login dengan Username
+                        </Button>
+                      </Form.Item>
+                    </Form>
                       </Col>
                     </Row>
                     {/* <Row>
@@ -630,7 +664,7 @@ const Login: React.FC<Props> = ({ me }) => {
                       </Typography.Paragraph>
                     </div>
                   }
-                  <Button type="link" onClick={() => setMethod('phoneNumber')}>Back to Login</Button>
+                  <Button type="link" onClick={() => setMethod('qrCode')}>Kembali ke Login</Button>
                 </Layout.Content>
               </Layout>
             </>}
