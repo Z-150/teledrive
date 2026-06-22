@@ -55,8 +55,8 @@
     "fastpriorityqueue": "0.7.4"
   },
   "scripts": {
-    "start": "react-scripts --openssl-legacy-provider --no-experimental-fetch start",
-    "build": "react-scripts --openssl-legacy-provider --no-experimental-fetch build",
+    "start": "react-scripts start",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
