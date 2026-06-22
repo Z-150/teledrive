@@ -52,8 +52,18 @@ function App(): React.ReactElement {
       const initData = tg.initData
       if (initData && !me?.user) {
         const alreadyTriedKey = 'tg_auth_attempted'
-        if (!sessionStorage.getItem(alreadyTriedKey)) {
-          sessionStorage.setItem(alreadyTriedKey, '1')
+        let hasTried = false
+        try {
+          hasTried = !!sessionStorage.getItem(alreadyTriedKey)
+        } catch (e) {
+          // ignore, sessionStorage might be blocked in strict iframes
+        }
+
+        if (!hasTried) {
+          try {
+            sessionStorage.setItem(alreadyTriedKey, '1')
+          } catch (e) {} // ignore
+          
           fetch('/api/v1/auth/telegramAuth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -65,9 +75,8 @@ function App(): React.ReactElement {
               if (data?.user) {
                 window.location.replace('/dashboard')
               }
-              // USER_NOT_FOUND or NO_SESSION → stay on login page, no action needed
             })
-            .catch(() => {}) // silently fail, let user login manually
+            .catch(() => {})
         }
       }
     }
