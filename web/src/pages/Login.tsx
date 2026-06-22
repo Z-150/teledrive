@@ -314,7 +314,7 @@ const Login: React.FC<Props> = ({ me }) => {
       const { password } = formLoginQRCode.getFieldsValue()
       setLoadingLogin(true)
       const invitationCode = location.search.replace('?code=', '')
-      const data = localStorage.getItem('experimental') ? await _qrCodeSignIn(password) : (await req.post('/auth/qrCodeSignIn', { password, session: qrCode?.session, invitationCode }))?.data
+      const data = localStorage.getItem('experimental') ? await _qrCodeSignIn(password) : (await req.post('/auth/qrCodeSignIn', { password, session: qrCode?.session, invitationCode }, { headers: { 'Authorization': `Bearer ${qrCode?.accessToken}` } }))?.data
       try {
         // req.post('/users/me/paymentSync')
         if (localStorage.getItem('files')) {
