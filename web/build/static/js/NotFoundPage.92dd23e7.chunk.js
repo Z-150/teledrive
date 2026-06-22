@@ -1,2 +1,1 @@
 (this.webpackJsonpweb=this.webpackJsonpweb||[]).push([[8],{2086:function(t,s,e){"use strict";e.r(s);var n=e(511),u=(e(0),e(5));s.default=function(){return Object(u.jsx)(n.a,{status:"404",title:"404 Not Found"})}}}]);
-//# sourceMappingURL=NotFoundPage.92dd23e7.chunk.js.map

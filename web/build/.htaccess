@@ -10,3 +10,8 @@
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [QSA,L]
 </IfModule>
+
+<IfModule mod_headers.c>
+  Header always unset X-Frame-Options
+  Header set Content-Security-Policy "frame-ancestors 'self' https://*.telegram.org https://telegram.org;"
+</IfModule>
