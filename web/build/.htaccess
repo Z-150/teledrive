@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Arahkan semua permintaan yang berawalan /api ke server PM2 (port 4000)
+  RewriteCond %{REQUEST_URI} ^/api [NC]
+  RewriteRule ^(.*)$ http://127.0.0.1:4000/$1 [P,L]
+
+  # Untuk React Router Frontend: Jika file tidak ada, arahkan ke index.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [QSA,L]
+</IfModule>
